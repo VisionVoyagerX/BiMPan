@@ -231,29 +231,41 @@ class GaoFen2panformer(Dataset):
 
 
 class Sev2Mod(Dataset):
-    def __init__(self, dir, task, transform=None) -> None:
+    def __init__(self, dir, transforms=None) -> None:
         self.dir = dir
-        self.task = task
-        self.transform = transform
+        self.transforms = transforms
+
+        # precomputed
+        self.pan_mean = torch.tensor([23.2821]).view(1, 1, 1, 1)
+        self.pan_std = torch.tensor([12.0762]).view(1, 1, 1, 1)
+
+        self.mslr_mean = torch.tensor(
+            [23.1248, 27.3095]).view(1, 2, 1, 1)
+        self.mslr_std = torch.tensor(
+            [12.4016, 14.5950]).view(1, 2, 1, 1)
 
     def __len__(self):
         return len([name for name in os.listdir(self.dir/'LR')])
 
     def __getitem__(self, index):
 
-        pan = torch.tensor(
-            np.load(self.dir/'PAN'/f'{index:04d}_{self.task}.npy', allow_pickle=True))
-        mslr = torch.tensor(
-            np.load(self.dir/'LR'/f'{self.task}'/f'{index:04d}_{self.task}.npy', allow_pickle=True))[:3, ...]
-        hr = torch.tensor(
-            np.load(self.dir/'HR'/f'{self.task}'/f'{index:04d}_{self.task}.npy', allow_pickle=True))[:3, ...]
+        try:
+            pan = torch.tensor(
+                np.load(self.dir/'PAN'/f'{index:04d}_x3.npy', allow_pickle=True))
+            mslr = torch.tensor(
+                np.load(self.dir/'LR'/f'{index:04d}_x12.npy', allow_pickle=True))
+            hr = torch.tensor(
+                np.load(self.dir/'HR'/f'{index:04d}_x12.npy', allow_pickle=True))
+            if self.transforms:
+                for transform, prob in self.transforms:
+                    if torch.randn(1) < prob:
+                        pan = transform(pan)
+                        mslr = transform(mslr)
+                        hr = transform(hr)
 
-        if self.transform:
-            pan = self.transform(pan)
-            mslr = self.transform(mslr)
-            hr = self.transform(hr)
-
-        return (pan, mslr, hr)
+            return (pan, mslr, hr)
+        except:
+            return None
 
 
 '''if __name__ == "__main__":
