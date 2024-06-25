@@ -8,6 +8,7 @@ from torch.nn import MSELoss
 from torch.utils.data import DataLoader
 from torchvision.transforms import Resize, RandomHorizontalFlip, RandomVerticalFlip, RandomRotation
 from torchmetrics import MetricCollection, PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
+from torchmetrics.image import SpectralAngleMapper, ErrorRelativeGlobalDimensionlessSynthesis
 from torch.optim.lr_scheduler import StepLR, MultiStepLR
 from torchsummary import summary
 
@@ -22,24 +23,24 @@ def main():
     print(device)
 
     # Initialize DataLoader
-    train_dataset = GaoFen2(
-        Path("/home/nick/VScode-workspace/Pansharpening_datasets/GF-2/train/train_gf2-001.h5"), transforms=[(RandomHorizontalFlip(1), 0.3), (RandomVerticalFlip(1), 0.3)])  # /home/ubuntu/project
+    train_dataset = Sev2Mod(
+        Path("data/emnist/pansharpenning_dataset/SEV2MOD_X12/train/"), transforms=[(RandomHorizontalFlip(1), 0.3), (RandomVerticalFlip(1), 0.3)])  # /home/ubuntu/project
     train_loader = DataLoader(
         dataset=train_dataset, batch_size=2, shuffle=True, drop_last=True)
 
-    validation_dataset = GaoFen2(
-        Path("/home/nick/VScode-workspace/Pansharpening_datasets/GF-2/val/valid_gf2.h5"))
+    validation_dataset = Sev2Mod(
+        Path("data/emnist/pansharpenning_dataset/SEV2MOD_X12/val/"))
     validation_loader = DataLoader(
         dataset=validation_dataset, batch_size=1, shuffle=True)
-    test_dataset = GaoFen2(
-        Path("/home/nick/VScode-workspace/Pansharpening_datasets/GF-2/test/test_gf2_multiExm1.h5"))
+    test_dataset = Sev2Mod(
+        Path("data/emnist/pansharpenning_dataset/SEV2MOD_X12/test_32/"))
     test_loader = DataLoader(
         dataset=test_dataset, batch_size=1, shuffle=False)
 
     print(print('Length of Dataloader: ', len(train_dataset))
           )
     # Initialize Model, optimizer, criterion and metrics
-    model = BiMPan(ms_channels=4, mslr_mean=train_dataset.mslr_mean.to(device), mslr_std=train_dataset.mslr_std.to(device), pan_mean=train_dataset.pan_mean.to(device),
+    model = BiMPan(ms_channels=2, mslr_mean=train_dataset.mslr_mean.to(device), mslr_std=train_dataset.mslr_std.to(device), pan_mean=train_dataset.pan_mean.to(device),
                    pan_std=train_dataset.pan_std.to(device)).to(device)
 
     optimizer = Adam(model.parameters(), lr=0.0003,
@@ -81,9 +82,9 @@ def main():
     steps = int((500 * 9714) / 16)  # 16 = batch_size
     save_interval = 100
     report_interval = 50
-    test_intervals = [20000, 40000, 60000, 80000, 1000000, 120000,
+    test_intervals = [5, 20000, 40000, 60000, 80000, 1000000, 120000,
                       140000, 160000, 180000]
-    evaluation_interval = [20000, 40000, 60000, 80000, 1000000, 120000,
+    evaluation_interval = [5, 20000, 40000, 60000, 80000, 1000000, 120000,
                            140000, 160000, 180000]
 
     lr_decay_intervals = [steps]
@@ -95,7 +96,7 @@ def main():
     mslr_example = torch.randn(
         (1, 4, 64 * 4, 64 * 4)).to(device)
 
-    summary(model, pan_example, mslr_example, verbose=1)
+    # summary(model, pan_example, mslr_example, verbose=1)
 
     scheduler = StepLR(optimizer, step_size=1, gamma=0.5)
 
@@ -123,7 +124,9 @@ def main():
 
         # forward
         mslr = torch.nn.functional.interpolate(
-            mslr, size=(64, 64), mode='bilinear')
+            mslr, size=(192, 192), mode='bilinear')
+        pan = torch.nn.functional.interpolate(
+            pan, size=(192, 192), mode='bilinear')
 
         pan, mslr, mshr = pan.to(device), mslr.to(device), mshr.to(device)
         mssr = model(pan, mslr)
@@ -185,8 +188,11 @@ def main():
                     # forward
                     pan, mslr, mshr = pan.to(device), mslr.to(
                         device), mshr.to(device)
+                    # forward
                     mslr = torch.nn.functional.interpolate(
-                        mslr, size=(64, 64), mode='bilinear')
+                        mslr, size=(192, 192), mode='bilinear')
+                    pan = torch.nn.functional.interpolate(
+                        pan, size=(192, 192), mode='bilinear')
                     mssr = model(pan, mslr)
                     val_loss = criterion(mssr, mshr)
                     val_metric = val_metric_collection.forward(mssr, mshr)
@@ -238,8 +244,11 @@ def main():
                     # forward
                     pan, mslr, mshr = pan.to(device), mslr.to(
                         device), mshr.to(device)
+                    # forward
                     mslr = torch.nn.functional.interpolate(
-                        mslr, size=(256, 256), mode='bilinear')
+                        mslr, size=(384, 384), mode='bilinear')
+                    pan = torch.nn.functional.interpolate(
+                        pan, size=(384, 384), mode='bilinear')
                     mssr = model(pan, mslr)
                     test_loss = criterion(mssr, mshr)
                     test_metric = test_metric_collection.forward(mssr, mshr)

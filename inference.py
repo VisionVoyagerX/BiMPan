@@ -7,8 +7,9 @@ from torch.nn import MSELoss
 from torch.utils.data import DataLoader
 from torchvision.transforms import Resize, RandomHorizontalFlip, RandomVerticalFlip, RandomRotation
 from torchmetrics import MetricCollection, PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
+from torchmetrics.image import SpectralAngleMapper, ErrorRelativeGlobalDimensionlessSynthesis
 from torch.optim.lr_scheduler import StepLR
-#from torchsummary import summary
+# from torchsummary import summary
 
 from data_loader.DataLoader import DIV2K, GaoFen2, Sev2Mod, WV3, GaoFen2panformer
 from BiMPan import BiMPan
@@ -18,27 +19,35 @@ import matplotlib.pyplot as plt
 
 
 def main():
-    choose_dataset = 'WV3'  # choose dataset
+    choose_dataset = 'S2M'  # choose dataset
 
     if choose_dataset == 'GaoFen2':
         dataset = eval('GaoFen2')
-        tr_dir = '../pansharpenning_dataset/GF2/train/train_gf2.h5'
-        eval_dir = '../pansharpenning_dataset/GF2/val/valid_gf2.h5'
-        test_dir = '../pansharpenning_dataset/GF2/test/test_gf2_multiExm1.h5'
+        tr_dir = 'data/emnist/pansharpenning_dataset/GF2/train/train_gf2.h5'
+        eval_dir = '.data/emnist/pansharpenning_dataset/GF2/val/valid_gf2.h5'
+        test_dir = 'data/emnist/pansharpenning_dataset/GF2/test/test_gf2_multiExm1.h5'
         checkpoint_dir = 'checkpoints/BiMPan_GF2/BiMPan_GF2_2024_02_18-12_21_11.pth.tar'
         ms_channel = 4
         ergas_l = 4
     elif choose_dataset == 'WV3':
         dataset = eval('WV3')
-        tr_dir = '../pansharpenning_dataset/WV3/train/train_wv3.h5'
-        eval_dir = '../pansharpenning_dataset/WV3/val/valid_wv3.h5'
-        test_dir = '../pansharpenning_dataset/WV3/test/test_wv3_multiExm1.h5'
+        tr_dir = 'data/emnist/pansharpenning_dataset/WV3/train/train_wv3.h5'
+        eval_dir = 'data/emnist/pansharpenning_dataset/WV3/val/valid_wv3.h5'
+        test_dir = 'data/emnist/pansharpenning_dataset/WV3/test/test_wv3_multiExm1.h5'
         checkpoint_dir = 'checkpoints/BiMPan_WV3/BiMPan_WV3_2024_02_17-14_16_14.pth.tar'
         ms_channel = 8
         ergas_l = 4
+
+    elif choose_dataset == 'S2M':
+        dataset = eval('Sev2Mod')
+        tr_dir = 'data/emnist/pansharpenning_dataset/SEV2MOD_X12/train/'
+        eval_dir = 'data/emnist/pansharpenning_dataset/SEV2MOD_X12/val/'
+        test_dir = 'data/emnist/pansharpenning_dataset/SEV2MOD_X12/test_32/'
+        checkpoint_dir = 'checkpoints/BiMPan_S2M/BiMPan_S2M_2024_06_24-15_58_30.pth.tar'
+        ms_channel = 2
+        ergas_l = 8  # FIXME
     else:
         print(choose_dataset, ' does not exist')
-
 
     # Prepare device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -149,7 +158,9 @@ def main():
         for i, (pan, mslr, mshr) in enumerate(test_progress_bar):
             # forward
             mslr = torch.nn.functional.interpolate(
-                mslr, size=(256, 256), mode='bilinear')
+                mslr, size=(384, 384), mode='bilinear')
+            pan = torch.nn.functional.interpolate(
+                pan, size=(384, 384), mode='bilinear')
 
             pan, mslr, mshr = pan.to(device), mslr.to(device), mshr.to(device)
             mssr = model(pan, mslr)
@@ -157,7 +168,7 @@ def main():
             test_metric = test_metric_collection.forward(mssr, mshr)
             test_report_loss += test_loss
 
-            figure, axis = plt.subplots(nrows=1, ncols=4, figsize=(15, 5))
+            """figure, axis = plt.subplots(nrows=1, ncols=4, figsize=(15, 5))
             axis[0].imshow((scaleMinMax(mslr.permute(0, 3, 2, 1).detach().cpu()[
                             0, ...].numpy())).astype(np.float32)[..., :3], cmap='viridis')
             axis[0].set_title('(a) LR')
@@ -180,7 +191,7 @@ def main():
             axis[3].axis("off")
 
             plt.savefig(f'results/Images_{choose_dataset}_{i}.png')
-
+"""
             mslr = mslr.permute(0, 3, 2, 1).detach().cpu().numpy()
             pan = pan.permute(0, 3, 2, 1).detach().cpu().numpy()
             mssr = mssr.permute(0, 3, 2, 1).detach().cpu().numpy()
